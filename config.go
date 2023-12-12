@@ -38,7 +38,7 @@ func DefaultConfig() Config {
 		Cap:     32,
 		Hasher:  newDefaultHasher(),
 		Logger:  DefaultLogger(),
-		Verbose: true,
+		Verbose: false,
 	}
 }
 
@@ -50,7 +50,7 @@ func TestConfig() Config {
 		Logger:  DefaultLogger(),
 		Verbose: true,
 		OnRemoveWithReason: func(key string, value interface{}, reason RemoveReason) {
-			fmt.Printf("callback -->> key:<%s> value:<%v> reason:<%d>\n", key, value, reason)
+			fmt.Printf("execute callback  key:<%s> value:<%+v> reason:<%d>\n", key, value, reason)
 		},
 	}
 }

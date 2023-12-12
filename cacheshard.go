@@ -70,10 +70,7 @@ func (cs *cacheShard) expireCleanup() {
 	for {
 		select {
 		case <-cs.cleanupTicker.C:
-		case k := <-cs.addChan: // 立即触发
-			if cs.isVerbose {
-				cs.logger.Printf("[shard %d]: set expired key <%s>", cs.id, k)
-			}
+		case <-cs.addChan: // 立即触发
 
 		case <-cs.close: // stop goroutine
 			if cs.isVerbose {
@@ -139,9 +136,7 @@ func (cs *cacheShard) set(key string, value interface{}, lifeSpan time.Duration)
 		cs.list.MoveToFront(oldEle)
 
 		if oldLifeSpan > 0 && lifeSpan == 0 { // 原来的有过期时间，新的没有过期时间
-			if cs.isVerbose {
-				cs.logger.Printf("[shard %d] reset persist key <%s>\n", cs.id, key)
-			}
+
 			delete(cs.expireItems, key)
 		}
 
@@ -179,6 +174,14 @@ func (cs *cacheShard) set(key string, value interface{}, lifeSpan time.Duration)
 					cs.addChan <- key
 				}()
 			}
+		}
+	}
+
+	if cs.isVerbose {
+		if lifeSpan == 0 {
+			cs.logger.Printf("[shard %d]: set persist key <%s>\n", cs.id, key)
+		} else {
+			cs.logger.Printf("[shard %d]: set expired key <%s>", cs.id, key)
 		}
 	}
 	return nil
@@ -268,6 +271,9 @@ func (cs *cacheShard) getorset(key string, value interface{}, lifeSpan time.Dura
 		if item.LifeSpan() > 0 {
 			delete(cs.expireItems, item.Key())
 		}
+		if cs.isVerbose {
+			cs.logger.Printf("[shard %d] no space del key <%s>\n", cs.id, item.Key())
+		}
 		cs.onRemove(key, item.Value(), NoSpace)
 	}
 	// add
@@ -279,6 +285,14 @@ func (cs *cacheShard) getorset(key string, value interface{}, lifeSpan time.Dura
 			go func() {
 				cs.addChan <- key
 			}()
+		}
+	}
+
+	if cs.isVerbose {
+		if lifeSpan == 0 {
+			cs.logger.Printf("[shard %d]: set persist key <%s>\n", cs.id, key)
+		} else {
+			cs.logger.Printf("[shard %d]: set expired key <%s>", cs.id, key)
 		}
 	}
 	return value, nil
