@@ -36,6 +36,7 @@ type cacheShard struct {
 	close chan struct{}
 }
 
+// shard
 func newCacheShard(conf Config, id int, onRemove OnRemoveCallback, close chan struct{}) *cacheShard {
 
 	shard := &cacheShard{
@@ -52,11 +53,12 @@ func newCacheShard(conf Config, id int, onRemove OnRemoveCallback, close chan st
 		onRemove:        onRemove,
 		close:           close,
 	}
-
+	// goroutine clean expired key
 	go shard.expireCleanup()
 	return shard
 }
 
+// clean cache
 func (cs *cacheShard) flush() {
 	cs.lock.Lock()
 	defer cs.lock.Unlock()
@@ -65,6 +67,11 @@ func (cs *cacheShard) flush() {
 	cs.items = nil
 	cs.list = nil
 }
+
+/*
+1.当定时器到期，执行过期清理
+2.当新增的key有过期时间，通过addChan触发执行
+*/
 func (cs *cacheShard) expireCleanup() {
 
 	for {
@@ -81,11 +88,12 @@ func (cs *cacheShard) expireCleanup() {
 		}
 		cs.cleanupTicker.Stop()
 
+		// 记录下一次定时器的最小间隔（目的：key过期了，尽快删除）
 		smallestInternal := 0 * time.Second
 		now := time.Now()
 		cs.lock.Lock()
 
-		for key, ele := range cs.expireItems { // 遍历
+		for key, ele := range cs.expireItems { // 遍历过期key
 
 			item := ele.Value.(*cacheItem)
 			if item.LifeSpan() == 0 { // 没有过期时间
@@ -136,11 +144,10 @@ func (cs *cacheShard) set(key string, value interface{}, lifeSpan time.Duration)
 		cs.list.MoveToFront(oldEle)
 
 		if oldLifeSpan > 0 && lifeSpan == 0 { // 原来的有过期时间，新的没有过期时间
-
 			delete(cs.expireItems, key)
 		}
 
-		if oldLifeSpan == 0 && lifeSpan > 0 {
+		if oldLifeSpan == 0 && lifeSpan > 0 { // 原有的无过期时间，当前有过期时间
 			cs.expireItems[key] = oldEle
 			if lifeSpan < cs.cleanupInterval {
 				go func() {
@@ -151,7 +158,7 @@ func (cs *cacheShard) set(key string, value interface{}, lifeSpan time.Duration)
 
 	} else { // new item
 
-		if len(cs.items) >= int(cs.cap) { // No space
+		if len(cs.items) >= int(cs.cap) { // lru: No space
 			delVal := cs.list.Remove(cs.list.Back())
 			item := delVal.(*cacheItem)
 			delete(cs.items, item.Key())
@@ -208,13 +215,16 @@ func (cs *cacheShard) del(key string) error {
 		return ErrKeyNotExist
 	}
 
+	// del items
 	delete(cs.items, key)
+	// del list
 	val := cs.list.Remove(ele)
-
 	item := val.(*cacheItem)
+	// del expireItems
 	if item.LifeSpan() > 0 {
 		delete(cs.expireItems, key)
 	}
+	// remove callback
 	cs.onRemove(key, item.Value(), Deleted)
 	if cs.isVerbose {
 		cs.logger.Printf("[shard %d] manual del key <%s>\n", cs.id, key)
@@ -234,6 +244,7 @@ func (cs *cacheShard) foreach(f func(key string, value interface{})) {
 	cs.lock.RLock()
 	defer cs.lock.RUnlock()
 
+	// range all item
 	for key, ele := range cs.items {
 		f(key, ele.Value.(*cacheItem).Value())
 	}
@@ -246,25 +257,19 @@ func (cs *cacheShard) exists(key string) bool {
 	return ok
 }
 
-func (cs *cacheShard) check() bool {
-
-	cs.lock.RLock()
-	defer cs.lock.RUnlock()
-
-	return len(cs.items) == cs.list.Len() && len(cs.items) <= int(cs.cap)
-}
-
 func (cs *cacheShard) getorset(key string, value interface{}, lifeSpan time.Duration) (interface{}, error) {
 	cs.lock.Lock()
 	defer cs.lock.Unlock()
 
+	// get
 	oldEle, ok := cs.items[key]
 	if ok {
 		cs.list.MoveToFront(oldEle) // lru : move to front
 		return oldEle.Value.(*cacheItem).Value(), nil
 	}
 
-	if len(cs.items) >= int(cs.cap) { // No space
+	// set
+	if len(cs.items) >= int(cs.cap) { //lru: No space
 		delVal := cs.list.Remove(cs.list.Back())
 		item := delVal.(*cacheItem)
 		delete(cs.items, item.Key())
@@ -287,7 +292,7 @@ func (cs *cacheShard) getorset(key string, value interface{}, lifeSpan time.Dura
 			}()
 		}
 	}
-
+	// log
 	if cs.isVerbose {
 		if lifeSpan == 0 {
 			cs.logger.Printf("[shard %d]: set persist key <%s>\n", cs.id, key)

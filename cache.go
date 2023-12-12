@@ -2,14 +2,13 @@ package easycache
 
 import (
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/gofish2020/easycache/utils"
 )
 
 const (
-	miniCap = 100
+	defaultCap = 32
 )
 
 type EasyCache struct {
@@ -28,7 +27,7 @@ func New(conf Config) (*EasyCache, error) {
 	}
 
 	if conf.Cap <= 0 {
-		conf.Cap = miniCap
+		conf.Cap = defaultCap
 	}
 	// init cache object
 	cache := &EasyCache{
@@ -108,11 +107,4 @@ func (e *EasyCache) getShard(hashedKey uint64) (shard *cacheShard) {
 }
 
 func (e *EasyCache) notProvidedOnRemove(key string, value interface{}, reason RemoveReason) {
-}
-
-// Only for test
-func (e *EasyCache) Check() {
-	for i, shard := range e.shards {
-		fmt.Printf("[shard %d] check result %v\n", i, shard.check())
-	}
 }
