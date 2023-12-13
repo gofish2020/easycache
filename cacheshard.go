@@ -194,6 +194,56 @@ func (cs *cacheShard) set(key string, value interface{}, lifeSpan time.Duration)
 	return nil
 }
 
+func (cs *cacheShard) getIfNotExist(key string, g Getter, lifeSpan time.Duration) (interface{}, error) {
+	cs.lock.Lock()
+	defer cs.lock.Unlock()
+	oldEle, ok := cs.items[key]
+	if ok {
+		cs.list.MoveToFront(oldEle) // lru : move to front
+		return oldEle.Value.(*cacheItem).Value(), nil
+	}
+
+	value, err := g.Get(key)
+	if err != nil {
+		return nil, err
+	}
+
+	// set
+	if len(cs.items) >= int(cs.cap) { //lru: No space
+		delVal := cs.list.Remove(cs.list.Back())
+		item := delVal.(*cacheItem)
+		delete(cs.items, item.Key())
+		if item.LifeSpan() > 0 {
+			delete(cs.expireItems, item.Key())
+		}
+		if cs.isVerbose {
+			cs.logger.Printf("[shard %d] no space del key <%s>\n", cs.id, item.Key())
+		}
+		cs.onRemove(key, item.Value(), NoSpace)
+	}
+	// add
+	ele := cs.list.PushFront(newCacheItem(key, value, lifeSpan))
+	cs.items[key] = ele
+	if lifeSpan > 0 {
+		cs.expireItems[key] = ele
+		if lifeSpan < cs.cleanupInterval {
+			go func() {
+				cs.addChan <- key
+			}()
+		}
+	}
+	// log
+	if cs.isVerbose {
+		if lifeSpan == 0 {
+			cs.logger.Printf("[shard %d]: set persist key <%s>\n", cs.id, key)
+		} else {
+			cs.logger.Printf("[shard %d]: set expired key <%s>", cs.id, key)
+		}
+	}
+	return value, nil
+
+}
+
 func (cs *cacheShard) get(key string) (interface{}, error) {
 	cs.lock.RLock()
 	defer cs.lock.RUnlock()

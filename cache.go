@@ -11,6 +11,16 @@ const (
 	defaultCap = 32
 )
 
+type Getter interface {
+	Get(string) (interface{}, error)
+}
+
+type GetterFunc func(string) (interface{}, error)
+
+func (g GetterFunc) Get(key string) (interface{}, error) {
+	return g(key)
+}
+
 type EasyCache struct {
 	shards    []*cacheShard
 	hash      Hasher
@@ -20,6 +30,7 @@ type EasyCache struct {
 	close chan struct{}
 }
 
+// New initialize new instance of EasyCache
 func New(conf Config) (*EasyCache, error) {
 
 	if !utils.IsPowerOfTwo(conf.Shards) {
@@ -52,6 +63,7 @@ func New(conf Config) (*EasyCache, error) {
 	return cache, nil
 }
 
+// Set add k/v or modify existing k/v
 func (e *EasyCache) Set(key string, value interface{}, duration time.Duration) error {
 
 	hashedKey := e.hash.Sum64(key)
@@ -60,10 +72,18 @@ func (e *EasyCache) Set(key string, value interface{}, duration time.Duration) e
 
 }
 
+// Get get k/v if exist,otherwise get an error
 func (e *EasyCache) Get(key string) (interface{}, error) {
 	hashedKey := e.hash.Sum64(key)
 	shard := e.getShard(hashedKey)
 	return shard.get(key)
+}
+
+// GetIfNotExist get an existing k/v  or  create a new k/v though by Getter
+func (e *EasyCache) GetIfNotExist(key string, g Getter, duration time.Duration) (interface{}, error) {
+	hashedKey := e.hash.Sum64(key)
+	shard := e.getShard(hashedKey)
+	return shard.getIfNotExist(key, g, duration)
 }
 
 func (e *EasyCache) GetOrSet(key string, value interface{}, duration time.Duration) (interface{}, error) {

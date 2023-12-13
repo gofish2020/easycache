@@ -1,7 +1,7 @@
 # Golang实现缓存库 EasyCache
 
 
-学了不吃亏，学了不上当,进厂打钉必备基本功，看完绝对有很爽的感觉。核心代码也就**300**多行
+学了不吃亏，学了不上当,进厂打钉必备基本功，看完绝对有很爽的感觉。核心代码也就**300**多行，代码虽少但是功能一点不打折
 
 托管到Github: https://github.com/gofish2020/easycache 欢迎 Fork & Star
 
@@ -55,7 +55,7 @@ func New(conf Config) (*EasyCache, error) {
 `newCacheShard`函数，用来初始化实际存放 `k/v`的数据结构`*cacheShard`(也就是单个分片)。
 分片底层的存储采用两个map和一个list:
 -  `items`负责保存所有的`k/v`(过期or不过期都有存)
--  `expireItems`负责保存有过期时间的`k/v`，目的在于减少扫面过期`key`的数据量
+-  `expireItems`负责保存有过期时间的`k/v`，目的在于减少扫描key`的数据量
 -  `list`用作`LRU`记录最近最少使用`key`的顺序。LRU代码实现看这篇文章 [Leetcode LRU题解](https://zhuanlan.zhihu.com/p/667020012)，有助于理解本项目中的LRU的细节。
 ```go
 func newCacheShard(conf Config, id int, onRemove OnRemoveCallback, close chan struct{}) *cacheShard {

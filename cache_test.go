@@ -149,3 +149,18 @@ func TestRemoveCallback(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 }
+
+func TestGetIfNotExist(t *testing.T) {
+	t.Parallel()
+	cache, _ := New(TestConfig())
+
+	cache.Set("key", 1, 3*time.Second)
+
+	time.Sleep(4 * time.Second)
+
+	cacheValue, _ := cache.GetIfNotExist("key", GetterFunc(func(s string) (interface{}, error) {
+		return "yay!this is soruce", nil
+	}), 2*time.Second)
+
+	assertEqual(t, "yay!this is soruce", cacheValue)
+}
